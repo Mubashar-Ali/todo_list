@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TodoAppAnimatedList extends StatefulWidget {
   const TodoAppAnimatedList({super.key});
@@ -9,12 +12,83 @@ class TodoAppAnimatedList extends StatefulWidget {
 
 class _TodoAppAnimatedListState extends State<TodoAppAnimatedList> {
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
-  var listButton = ['All', 'Completed', 'Uncomplete', 'Delete All'];
+  var listButton = ['All', 'Completed', 'Uncomplete'];
   int _selectedIndex = 0;
   List<Todo> list = [];
   bool isCheck = false;
   var textController = TextEditingController();
   var textFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    getter();
+  }
+
+  void getter() async {
+    final sp = await SharedPreferences.getInstance();
+    List<String> savedTodos = sp.getStringList('todos') ?? [];
+
+    list = savedTodos.map((todoString) {
+      Map<String, dynamic> todoMap = jsonDecode(todoString);
+      return Todo(title: todoMap['title'], isCheck: todoMap['isCheck']);
+    }).toList();
+
+    setState(() {});
+  }
+
+  void savedTodos() async {
+    final sp = await SharedPreferences.getInstance();
+
+    List<String> todoString = list.map((todo) {
+      return jsonEncode({'title': todo.title, 'isCheck': todo.isCheck});
+    }).toList();
+
+    sp.setStringList('todos', todoString);
+    setState(() {});
+  }
+
+  void addItem() async {
+    String txt = textController.text;
+    if (txt.isNotEmpty) {
+      list.add(Todo(title: txt));
+      textController.clear();
+      textFocus.requestFocus();
+      savedTodos();
+
+      _listKey.currentState?.insertItem(list.length - 1);
+    }
+  }
+
+  void btnDelete(int index) {
+    var removedItem = list[index];
+
+    list.removeAt(index);
+    savedTodos();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Task Deleted'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    _listKey.currentState?.removeItem(
+      index,
+      (context, animation) => _buildAnimatedTile(removedItem, index, animation),
+    );
+  }
+
+  void btnEdit(int index) {
+    textFocus.requestFocus();
+    textController.text = list[index].title;
+    btnDelete(index);
+    savedTodos();
+  }
+
+  void _clearAll() {
+    list.clear();
+    savedTodos();
+  }
 
   @override
   void dispose() {
@@ -61,15 +135,7 @@ class _TodoAppAnimatedListState extends State<TodoAppAnimatedList> {
                           vertical: 10, horizontal: 20),
                       suffixIcon: IconButton(
                         icon: Icon(Icons.add, color: Colors.teal.shade700),
-                        onPressed: () {
-                          if (textController.text.isNotEmpty) {
-                            setState(() {
-                              _addItem(Todo(title: textController.text));
-                              textController.clear();
-                              textFocus.requestFocus();
-                            });
-                          }
-                        },
+                        onPressed: addItem,
                       ),
                     ),
                   ),
@@ -78,6 +144,7 @@ class _TodoAppAnimatedListState extends State<TodoAppAnimatedList> {
             ),
             const SizedBox(height: 20),
             Row(
+              // spacing: 20,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: List.generate(
                 listButton.length,
@@ -91,20 +158,20 @@ class _TodoAppAnimatedListState extends State<TodoAppAnimatedList> {
                     });
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: index == 3
-                        ? Colors.red.shade700
-                        : _selectedIndex == index
-                            ? Colors.teal.shade700
-                            : Colors.white,
-                    foregroundColor: index == 3 || _selectedIndex == index
-                        ? Colors.white
-                        : Colors.black,
+                    backgroundColor: _selectedIndex == index
+                        ? Colors.teal.shade700
+                        : Colors.white,
+                    foregroundColor:
+                        _selectedIndex == index ? Colors.white : Colors.black,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
                     elevation: 3,
                   ),
-                  child: Text(listButton[index]),
+                  child: Text(
+                    listButton[index],
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
               ),
             ),
@@ -138,27 +205,16 @@ class _TodoAppAnimatedListState extends State<TodoAppAnimatedList> {
           ],
         ),
       ),
+      floatingActionButton: ElevatedButton(
+        
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+        onPressed: _clearAll,
+        child: const Text(
+          'Delete All',
+          style: TextStyle(color: Colors.white, fontSize: 12),
+        ),
+      ),
     );
-  }
-
-  void _addItem(Todo todo) {
-    list.add(todo);
-    _listKey.currentState?.insertItem(list.length - 1);
-  }
-
-  void _removeItem(int index) {
-    var removedItem = list[index];
-    list.removeAt(index);
-    _listKey.currentState?.removeItem(
-      index,
-      (context, animation) => _buildAnimatedTile(removedItem, index, animation),
-    );
-  }
-
-  void _clearAll() {
-    for (int i = list.length - 1; i >= 0; i--) {
-      _removeItem(i);
-    }
   }
 
   Widget _buildAnimatedTile(Todo todo, int index, Animation<double> animation) {
@@ -181,22 +237,15 @@ class _TodoAppAnimatedListState extends State<TodoAppAnimatedList> {
             onCheck: (value) {
               setState(() {
                 list[index].isCheck = value;
+                savedTodos();
               });
             },
             onEdit: () => btnEdit(index),
-            onDelete: () => _removeItem(index),
+            onDelete: () => btnDelete(index),
           ),
         ),
       ),
     );
-  }
-
-  void btnEdit(int index) {
-    setState(() {
-      textFocus.requestFocus();
-      textController.text = list[index].title;
-      _removeItem(index);
-    });
   }
 }
 

@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TodoAppListview extends StatefulWidget {
   const TodoAppListview({super.key});
@@ -8,17 +11,87 @@ class TodoAppListview extends StatefulWidget {
 }
 
 class _TodoAppListviewState extends State<TodoAppListview> {
-  var listButton = ['All', 'Completed', 'Uncomplete', 'Delete All'];
+  var listButton = ['All', 'Completed', 'Uncomplete'];
   int _selectedIndex = 0;
   List<Todo> list = [];
-  bool isCheck = false;
   var textController = TextEditingController();
   var textFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    getter();
+  }
 
   @override
   void dispose() {
     textController.dispose();
     super.dispose();
+  }
+
+  void getter() async {
+    final sp = await SharedPreferences.getInstance();
+    List<String> savedTodos = sp.getStringList('todos') ?? [];
+
+    // print(savedTodos);
+    list = savedTodos.map((todoString) {
+      Map<String, dynamic> todoMap = jsonDecode(todoString);
+      return Todo(title: todoMap['title'], isCheck: todoMap['isCheck']);
+    }).toList();
+
+    setState(() {});
+  }
+
+  void savedTodos() async {
+    final sp = await SharedPreferences.getInstance();
+
+    List<String> todoString = list.map((todo) {
+      return jsonEncode({'title': todo.title, 'isCheck': todo.isCheck});
+    }).toList();
+
+    sp.setStringList('todos', todoString);
+    // debugPrint(todoString.length.toString());
+  }
+
+  void addItem() async {
+    String txt = textController.text;
+    if (txt.isNotEmpty) {
+      setState(() {
+        list.add(Todo(title: txt));
+        textController.clear();
+        textFocus.requestFocus();
+        savedTodos();
+      });
+    }
+    // debugPrint(list.length.toString());
+  }
+
+  void btnDelete(int index) async {
+    // final sp = await SharedPreferences.getInstance();
+    setState(() {
+      list.removeAt(index);
+      savedTodos();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Task Deleted'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    });
+  }
+
+  void btnEdit(int index) {
+    setState(() {
+      textFocus.requestFocus();
+      textController.text = list[index].title;
+      list.removeAt(index);
+      savedTodos();
+    });
+  }
+
+  void _clearAll() async {
+    list.clear();
+    savedTodos();
   }
 
   @override
@@ -61,15 +134,7 @@ class _TodoAppListviewState extends State<TodoAppListview> {
                           vertical: 10, horizontal: 20),
                       suffixIcon: IconButton(
                         icon: Icon(Icons.add, color: Colors.teal.shade700),
-                        onPressed: () {
-                          if (textController.text.isNotEmpty) {
-                            setState(() {
-                              _addItem(Todo(title: textController.text));
-                              textController.clear();
-                              textFocus.requestFocus();
-                            });
-                          }
-                        },
+                        onPressed: addItem,
                       ),
                     ),
                   ),
@@ -91,20 +156,20 @@ class _TodoAppListviewState extends State<TodoAppListview> {
                     });
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: index == 3
-                        ? Colors.red.shade700
-                        : _selectedIndex == index
-                            ? Colors.teal.shade700
-                            : Colors.white,
-                    foregroundColor: index == 3 || _selectedIndex == index
-                        ? Colors.white
-                        : Colors.black,
+                    backgroundColor: _selectedIndex == index
+                        ? Colors.teal.shade700
+                        : Colors.white,
+                    foregroundColor:
+                        _selectedIndex == index ? Colors.white : Colors.black,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
                     elevation: 3,
                   ),
-                  child: Text(listButton[index]),
+                  child: Text(
+                    listButton[index],
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
               ),
             ),
@@ -136,35 +201,15 @@ class _TodoAppListviewState extends State<TodoAppListview> {
           ],
         ),
       ),
-    );
-  }
-
-  void btnDelete(int index) {
-    setState(() {
-      list.removeAt(index);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Task Deleted'),
-          duration: Duration(seconds: 1),
+      floatingActionButton: ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+        onPressed: _clearAll,
+        child: const Text(
+          'Delete All',
+          style: TextStyle(color: Colors.white),
         ),
-      );
-    });
-  }
-
-  void btnEdit(int index) {
-    setState(() {
-      textFocus.requestFocus();
-      textController.text = list[index].title;
-      list.removeAt(index);
-    });
-  }
-
-  void _addItem(Todo todo) {
-    list.add(todo);
-  }
-
-  void _clearAll() {
-    list.clear();
+      ),
+    );
   }
 
   Widget _buildAnimatedTile(Todo todo, int index) {
@@ -179,6 +224,7 @@ class _TodoAppListviewState extends State<TodoAppListview> {
         onCheck: (value) {
           setState(() {
             list[index].isCheck = value;
+            savedTodos();
           });
         },
         onEdit: () => btnEdit(index),

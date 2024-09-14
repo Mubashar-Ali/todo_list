@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:todo_list/animatedList.dart';
 import 'package:todo_list/listview.dart';
@@ -21,8 +19,8 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
       ),
-      // home: const TodoAppAnimatedList(),
-      home: const TodoAppListview(),
+      home: const TodoAppAnimatedList(),
+      // home: const TodoAppListview(),
     );
   }
 }
